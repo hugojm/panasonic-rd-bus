@@ -1,0 +1,6 @@
+.pio/
+.esphome/
+esphome/secrets.yaml
+test/test_rdbus
+__pycache__/
+*.log
