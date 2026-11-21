@@ -79,7 +79,9 @@ class EnvelopeDetector {
     return true;
   }
 
-  uint32_t gap_us_ = 150;
+  // Silence longer than this ends a burst. A quarter bit (~500 us) bridges the short
+  // carrier dropouts seen on a real W18BD3P bus while still splitting at a 1-bit.
+  uint32_t gap_us_ = 500;
   uint32_t min_edges_ = 3;
   bool active_ = false;
   uint32_t start_ = 0, last_ = 0, edges_ = 0;
@@ -500,13 +502,14 @@ class BusStats {
   double carrier_hz() const { return carrier_n_ ? carrier_sum_ / carrier_n_ : 0; }
 
   // Single-bit bursts are the shortest cluster; longer ones are near multiples of it.
-  double bit_us() const {
+  // floor_us: ignore fragments shorter than this (use about half the expected bit).
+  double bit_us(uint32_t floor_us = 1000) const {
     const size_t n = n_ < kN ? n_ : kN;
     if (n < 16)
       return 0;
     uint32_t mn = UINT32_MAX;
     for (size_t i = 0; i < n; i++)
-      if (dur_[i] > 300 && dur_[i] < mn)
+      if (dur_[i] > floor_us && dur_[i] < mn)
         mn = dur_[i];
     if (mn == UINT32_MAX)
       return 0;
@@ -533,14 +536,14 @@ class BusStats {
 };
 
 // ---------------------------------------------------------------------------
-// Unit state (PROVISIONAL register map from post 54; verify on your unit)
-// ---------------------------------------------------------------------------
-//   0x60 power   (0 = off, 1 = on)
-//   0x61 mode    (value meaning unknown; 2 seen once)
-//   0x62 fan     (1/2/3 = low/med/high?, 8 = auto?)
-//   0x63 vane    (guess)
-//   0x64 setpoint as a small index, NOT degrees
+// Unit state. Register map confirmed on a W18BD3P + CZ-RD514C (2026-11-21):
+//   0x60 power     0 = off, 1 = on
+//   0x61 mode      1 = heat, 2 = cool, 3 = fan, 4 = dry, 8 = auto
+//   0x62 fan       1 = high, 2 = medium, 3 = low, 8 = auto
+//   0x63 vane      always 8 on a ducted unit ("not available")
+//   0x64 setpoint  index, degrees C = index + 16
 // Command frames carry (reg, value). State dumps carry (reg, 0x20 + value) pairs.
+// ---------------------------------------------------------------------------
 
 constexpr uint8_t kRegPower = 0x60;
 constexpr uint8_t kRegMode = 0x61;

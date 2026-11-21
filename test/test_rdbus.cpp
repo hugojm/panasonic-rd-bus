@@ -38,6 +38,7 @@ struct Sim {
   uint32_t carrier_hz = 19200;
   double bit_scale = 1.0;  // transmitter bit time relative to the receiver's
   uint32_t jitter_us = 2;
+  double dropout_per_bit = 0;  // chance of a 100-350 us carrier gap inside a 0-bit
   std::mt19937 rng{42};
   std::vector<uint32_t> edges;
   uint32_t t = 100000;  // start at 100 ms
@@ -51,9 +52,24 @@ struct Sim {
     const double half = 1e6 / carrier_hz / 2;
     for (size_t i = 0; i < n; i++) {
       if (seg[i].carrier) {
+        // Optional dropout: no edges inside [gap_from, gap_to).
+        uint32_t gap_from = UINT32_MAX, gap_to = 0;
+        std::uniform_real_distribution<double> u(0, 1);
+        const uint32_t nbits = seg[i].us / bit;
+        for (uint32_t b = 0; b < nbits && dropout_per_bit > 0; b++) {
+          if (u(rng) < dropout_per_bit) {
+            gap_from = b * bit + 300 + (uint32_t) (u(rng) * (bit - 800));
+            gap_to = gap_from + 100 + (uint32_t) (u(rng) * 250);
+            break;
+          }
+        }
         uint32_t k = 0;
-        for (; k * half < seg[i].us; k++)
-          edges.push_back(t + (uint32_t) (k * half) + j(rng));
+        for (; k * half < seg[i].us; k++) {
+          const uint32_t off = (uint32_t) (k * half);
+          if (off >= gap_from && off < gap_to)
+            continue;
+          edges.push_back(t + off + j(rng));
+        }
         if (k % 2 == 1)  // line still pulled low: release at the end
           edges.push_back(t + seg[i].us);
       }
@@ -334,6 +350,11 @@ int main() {
     Sim s;
     s.jitter_us = 8;
     run_case("8 us edge jitter", s);
+  }
+  {
+    Sim s;
+    s.dropout_per_bit = 0.3;
+    run_case("carrier dropouts of 100-350 us inside 0-bits (seen on the real bus)", s);
   }
   {
     Sim s;

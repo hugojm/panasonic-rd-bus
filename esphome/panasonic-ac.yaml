@@ -49,14 +49,17 @@ climate:
     bit_time: 2020us         # use the value the sniffer's `stats` reports
     carrier_frequency: 19200Hz
     # transmit_after: 0x9F   # optional: only start sending right after this poll byte
-    setpoint_base: 16        # calibrate: temperature at setpoint index 0
+    setpoint_base: 16        # confirmed: °C = index + 16 (22 °C = index 6)
     setpoint_step: 1
-    setpoint_max_index: 14
-    # mode_values:           # fill in from your captures (register 0x61)
-    #   cool: 0x02
-    #   heat: 0x01
-    fan_values:              # register 0x62, community guess
-      low: 0x01
+    setpoint_max_index: 14   # 16-30 °C
+    mode_values:             # register 0x61, confirmed on a W18BD3P
+      cool: 0x02
+      heat: 0x01
+      dry: 0x04
+      fan_only: 0x03
+      auto: 0x08
+    fan_values:              # register 0x62, confirmed on a W18BD3P
+      low: 0x03
       medium: 0x02
-      high: 0x03
+      high: 0x01
       auto: 0x08

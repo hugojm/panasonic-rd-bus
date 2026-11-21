@@ -23,8 +23,7 @@ CONF_MODE_VALUES = "mode_values"
 CONF_FAN_VALUES = "fan_values"
 CONF_LOG_POLLS = "log_polls"
 
-# Register values from the community decode (post 54). Fan values are a guess;
-# mode values are unknown, so modes are only offered once you map them.
+# Register values confirmed on a W18BD3P + CZ-RD514C (captured 2026-11-21).
 MODE_KEYS = {
     "cool": climate.CLIMATE_MODES["COOL"],
     "heat": climate.CLIMATE_MODES["HEAT"],
@@ -38,7 +37,8 @@ FAN_KEYS = {
     "high": climate.CLIMATE_FAN_MODES["HIGH"],
     "auto": climate.CLIMATE_FAN_MODES["AUTO"],
 }
-FAN_DEFAULTS = {"low": 1, "medium": 2, "high": 3, "auto": 8}
+FAN_DEFAULTS = {"low": 3, "medium": 2, "high": 1, "auto": 8}
+MODE_DEFAULTS = {"cool": 2, "heat": 1, "dry": 4, "fan_only": 3, "auto": 8}
 
 CONFIG_SCHEMA = cv.All(
     climate.climate_schema(PanasonicRD)
@@ -59,7 +59,7 @@ CONFIG_SCHEMA = cv.All(
             cv.Optional(CONF_SETPOINT_BASE, default=16.0): cv.float_,
             cv.Optional(CONF_SETPOINT_STEP, default=1.0): cv.positive_float,
             cv.Optional(CONF_SETPOINT_MAX_INDEX, default=14): cv.int_range(min=1, max=63),
-            cv.Optional(CONF_MODE_VALUES, default={}): cv.Schema(
+            cv.Optional(CONF_MODE_VALUES, default=MODE_DEFAULTS): cv.Schema(
                 {cv.Optional(k): cv.hex_uint8_t for k in MODE_KEYS}
             ),
             cv.Optional(CONF_FAN_VALUES, default=FAN_DEFAULTS): cv.Schema(

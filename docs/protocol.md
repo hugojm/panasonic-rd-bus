@@ -52,23 +52,41 @@ recovers no valid frames.
 - Frames: `E3 LEN payload[LEN] CS`, with `(sum of all bytes) & 0x7F == 0`.
   **Confirmed**: every frame quoted in post 54 passes (checked in the tests), which
   is unlikely by chance for 13 frames.
-- Each command frame is sent 3 times, 88.5 ms apart.
+- Each command frame is sent 3 times, ~177 ms apart start to start (88.5 ms of silence between copies).
 - State goes out only on change. Idle polls look the same whether the unit is on or off.
 
-## Registers (guess, from post 54)
+## Registers (confirmed on a W18BD3P + CZ-RD514C, 2026-11-21)
 
-| Frame | Meaning |
-| --- | --- |
-| `E3 02 60 01 3A` / `E3 02 60 00 3B` | power on / off |
-| `E3 02 62 0v CS` | fan, v = 3/2/1 (high/med/low?), 8 (auto?) |
-| `E3 02 64 0i CS` | setpoint *index*, 0-4 seen; mapping to °C unknown |
-| `E3 0C 60 21 61 22 62 28 63 28 64 21 49 20 0A` | state dump: (reg, 0x20 + value) pairs |
-| `E3 0A 6B 30 30 30 30 48 02 0F 4B 20 24` | unknown, ASCII-like ("0000"), maybe identification |
+Captured with the sniffer while pressing each button and noting the display.
+
+| Register | Meaning | Values |
+| --- | --- | --- |
+| `0x60` | power | 0 = off, 1 = on |
+| `0x61` | mode | 1 = heat, 2 = cool, 3 = fan, 4 = dry, 8 = auto |
+| `0x62` | fan | 1 = high, 2 = medium, 3 = low, 8 = auto (the reverse of post 54's guess) |
+| `0x63` | vane | always 8 on this ducted unit ("not available") |
+| `0x64` | setpoint | index; °C = index + 16 (22 °C = 6, 25 °C = 9) |
+
+Command example: `E3 02 64 07 30` sets 23 °C. State dumps such as
+`E3 0C 60 21 61 22 62 28 63 28 64 26 49 20 0C` carry (reg, 0x20 + value) pairs:
+on, cool, fan auto, vane 8, 22 °C.
+
+Also seen, meaning unknown:
+
+- `E1` frames with the same checksum (`E1 03 70 00 00 2C`, `E1 02 53 00 4A`,
+  `E1 02 66 01 36`), sent 3 times ~198 ms apart around state changes. They are
+  probably from the indoor unit (the `E3` frames are probably from the controller).
+- `E3 0C 68 00 6B 30 30 30 30 48 02 0D 50 13 44`: ASCII-like, sent with state dumps.
+- `E3 0C 65 20 61 22 62 21 64 26 63 28 68 00 09`: an alternative dump ordering.
+
+Timing: polls every 154.6 ms; `A6` replies 44 ms after polls `80` and `90`;
+2-byte command frames repeated 3× at 176.7 ms; 12-byte dumps repeated 3× at 397.6 ms.
+Carrier measured at 19.1-19.3 kHz.
 
 ## Open questions
 
 1. Which device polls (the test plan's step 2 answers this).
-2. Mode values (register 0x61) and setpoint index → °C.
+2. What the `E1` frames and registers `0x49`, `0x65`, `0x68`, `0x6B` mean.
 3. Inter-byte timing inside frames, and how the wall controller picks its
    transmit slot.
 4. Whether the indoor unit accepts a second controller's frames, and from which
