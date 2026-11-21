@@ -5,6 +5,8 @@
 
 #include "rdbus.h"
 #include "rdbus_esp32.h"
+#include "soc/gpio_periph.h"
+#include "soc/io_mux_reg.h"
 
 using namespace rdbus;
 
@@ -189,6 +191,20 @@ static void command(String c) {
     }
     Segment s{true, (uint32_t) arg.toInt() * 1000};
     Serial.println(tx.send(&s, 1) ? "carrier on" : "transmitter busy");
+    // Read the TX pad back (input buffer only, LEDC keeps driving it) and count toggles.
+    PIN_INPUT_ENABLE(GPIO_PIN_MUX_REG[TX_PIN]);
+    delay(10);
+    int last = gpio_get_level((gpio_num_t) TX_PIN), toggles = 0, highs = 0, n = 0;
+    const int64_t end = esp_timer_get_time() + 50000;
+    while (esp_timer_get_time() < end) {
+      const int v = gpio_get_level((gpio_num_t) TX_PIN);
+      toggles += v != last;
+      highs += v;
+      last = v;
+      n++;
+    }
+    Serial.printf("TX pin GPIO%d over 50 ms: %d toggles (~%d Hz), high %d%% of %d samples\n", TX_PIN, toggles,
+                  toggles * 10, n ? highs * 100 / n : 0, n);
   } else if (cmd == "delay") {
     sched.set_reply_delay_us((uint32_t) (arg.toFloat() * 1000));
     Serial.printf("reply delay %.1f ms after the trigger byte starts\n", arg.toFloat());
