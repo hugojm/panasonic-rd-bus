@@ -13,6 +13,7 @@ static const char *const TAG = "panasonic_rd";
 void PanasonicRD::setup() {
   this->dec_.set_bit_us(this->bit_us_);
   this->sched_.set_trigger(this->transmit_after_);
+  this->sched_.set_reply_delay_us(this->reply_delay_us_);
   if (!this->rx_.begin((gpio_num_t) this->rx_pin_, this->rx_pullup_)) {
     ESP_LOGE(TAG, "Could not set up the receive pin");
     this->mark_failed();
@@ -34,6 +35,7 @@ void PanasonicRD::dump_config() {
   if (this->transmit_) {
     ESP_LOGCONFIG(TAG, "  TX pin: GPIO%d, carrier %" PRIu32 " Hz%s", this->tx_pin_, this->carrier_hz_,
                   this->tx_ready_ ? "" : " (FAILED)");
+    ESP_LOGCONFIG(TAG, "  Transmits %" PRIu32 " us after poll 0x%02X", this->reply_delay_us_, this->transmit_after_);
   } else {
     ESP_LOGCONFIG(TAG, "  Transmit: disabled (listen only)");
   }
@@ -211,7 +213,9 @@ bool PanasonicRD::send_register(uint8_t reg, uint8_t value) {
   const uint8_t payload[2] = {reg, value};
   uint8_t frame[rdbus::kMaxMsg];
   const size_t n = rdbus::build_frame(payload, 2, frame, sizeof frame);
-  return this->send_raw(std::vector<uint8_t>(frame, frame + n), 3);
+  // Once is enough: each attempt waits for poll 0x81 (~2.7 s apart), the echo check
+  // retries corrupted copies, and the controller's state dump confirms the change.
+  return this->send_raw(std::vector<uint8_t>(frame, frame + n), 1);
 }
 
 bool PanasonicRD::send_raw(const std::vector<uint8_t> &bytes, uint8_t times) {

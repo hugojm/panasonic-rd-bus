@@ -121,11 +121,32 @@ class Transmitter {
     c.hpoint = 0;
     if (ledc_channel_config(&c) != ESP_OK)
       return false;
+    pin_ = pin;
     esp_timer_create_args_t a = {};
     a.callback = &Transmitter::tick_;
     a.arg = this;
     a.name = "rdbus_tx";
     return esp_timer_create(&a, &timer_) == ESP_OK;
+  }
+
+  // Move the carrier output to another pin (diagnostics: find where the TX stage is wired).
+  bool set_pin(gpio_num_t pin) {
+    if (busy_)
+      return false;
+    if (pin_ >= 0)
+      gpio_reset_pin((gpio_num_t) pin_);
+    ledc_channel_config_t c = {};
+    c.gpio_num = pin;
+    c.speed_mode = LEDC_LOW_SPEED_MODE;
+    c.channel = kChannel;
+    c.intr_type = LEDC_INTR_DISABLE;
+    c.timer_sel = kTimer;
+    c.duty = 0;
+    c.hpoint = 0;
+    if (ledc_channel_config(&c) != ESP_OK)
+      return false;
+    pin_ = pin;
+    return true;
   }
 
   bool set_carrier_hz(uint32_t hz) {
@@ -172,6 +193,7 @@ class Transmitter {
   }
 
   esp_timer_handle_t timer_ = nullptr;
+  int pin_ = -1;
   Segment segs_[kMaxSeg];
   size_t n_ = 0, idx_ = 0;
   int64_t next_at_ = 0;

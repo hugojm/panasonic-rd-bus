@@ -24,6 +24,7 @@ class PanasonicRD : public climate::Climate, public Component {
   void set_bit_time_us(uint32_t v) { this->bit_us_ = v; }
   void set_carrier_hz(uint32_t v) { this->carrier_hz_ = v; }
   void set_transmit_after(uint8_t b) { this->transmit_after_ = b; }
+  void set_reply_delay_us(uint32_t v) { this->reply_delay_us_ = v; }
   void set_setpoint_map(float base, float step, uint8_t max_index) {
     this->sp_base_ = base;
     this->sp_step_ = step;
@@ -65,6 +66,7 @@ class PanasonicRD : public climate::Climate, public Component {
   uint32_t bit_us_{2020};
   uint32_t carrier_hz_{19200};
   int transmit_after_{-1};
+  uint32_t reply_delay_us_{0};
   float sp_base_{16};
   float sp_step_{1};
   uint8_t sp_max_{14};

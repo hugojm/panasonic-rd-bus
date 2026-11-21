@@ -183,6 +183,13 @@ static void command(String c) {
       return;
     }
     queue_tx(b, n, 1);
+  } else if (cmd == "txpin") {
+    const int p = arg.toInt();
+    if (p == RX_PIN || (p >= 6 && p <= 11) || p == 1 || p == 3 || p >= 34) {
+      Serial.println("not allowed: RX, flash, UART or input-only pin");
+      return;
+    }
+    Serial.printf("TX pin -> GPIO%d: %s\n", p, tx.set_pin((gpio_num_t) p) ? "ok" : "failed");
   } else if (cmd == "hold") {
     // Diagnostic: continuous carrier for N ms, to check the TX stage reaches the bus.
     if (!armed || !tx_ready) {
@@ -203,7 +210,7 @@ static void command(String c) {
       last = v;
       n++;
     }
-    Serial.printf("TX pin GPIO%d over 50 ms: %d toggles (~%d Hz), high %d%% of %d samples\n", TX_PIN, toggles,
+    Serial.printf("carrier pin over 50 ms: %d toggles (~%d Hz), high %d%% of %d samples\n", toggles,
                   toggles * 10, n ? highs * 100 / n : 0, n);
   } else if (cmd == "delay") {
     sched.set_reply_delay_us((uint32_t) (arg.toFloat() * 1000));

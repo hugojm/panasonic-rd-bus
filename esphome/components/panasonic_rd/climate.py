@@ -17,6 +17,7 @@ CONF_TRANSMIT = "transmit"
 CONF_BIT_TIME = "bit_time"
 CONF_CARRIER_FREQUENCY = "carrier_frequency"
 CONF_TRANSMIT_AFTER = "transmit_after"
+CONF_REPLY_DELAY = "reply_delay"
 CONF_SETPOINT_BASE = "setpoint_base"
 CONF_SETPOINT_STEP = "setpoint_step"
 CONF_SETPOINT_MAX_INDEX = "setpoint_max_index"
@@ -50,14 +51,16 @@ CONFIG_SCHEMA = cv.All(
             cv.Optional(CONF_RX_PULLUP, default=False): cv.boolean,
             cv.Optional(CONF_TX_PIN): pins.internal_gpio_output_pin_number,
             cv.Optional(CONF_TRANSMIT, default=False): cv.boolean,
-            cv.Optional(CONF_BIT_TIME, default="2020us"): cv.All(
+            cv.Optional(CONF_BIT_TIME, default="2000us"): cv.All(
                 cv.positive_time_period_microseconds,
                 cv.Range(min=cv.TimePeriod(microseconds=500), max=cv.TimePeriod(microseconds=10000)),
             ),
-            cv.Optional(CONF_CARRIER_FREQUENCY, default="19200Hz"): cv.All(
+            cv.Optional(CONF_CARRIER_FREQUENCY, default="19300Hz"): cv.All(
                 cv.frequency, cv.Range(min=5000, max=100000)
             ),
-            cv.Optional(CONF_TRANSMIT_AFTER): cv.hex_uint8_t,
+            # Answer this poll like a second wall controller (0x81 is free on a W18BD3P).
+            cv.Optional(CONF_TRANSMIT_AFTER, default=0x81): cv.hex_uint8_t,
+            cv.Optional(CONF_REPLY_DELAY, default="44ms"): cv.positive_time_period_microseconds,
             cv.Optional(CONF_SETPOINT_BASE, default=16.0): cv.float_,
             cv.Optional(CONF_SETPOINT_STEP, default=1.0): cv.positive_float,
             cv.Optional(CONF_SETPOINT_MAX_INDEX, default=14): cv.int_range(min=1, max=63),
@@ -98,8 +101,8 @@ async def to_code(config):
     cg.add(var.set_transmit(config[CONF_TRANSMIT]))
     cg.add(var.set_bit_time_us(config[CONF_BIT_TIME].total_microseconds))
     cg.add(var.set_carrier_hz(int(config[CONF_CARRIER_FREQUENCY])))
-    if CONF_TRANSMIT_AFTER in config:
-        cg.add(var.set_transmit_after(config[CONF_TRANSMIT_AFTER]))
+    cg.add(var.set_transmit_after(config[CONF_TRANSMIT_AFTER]))
+    cg.add(var.set_reply_delay_us(config[CONF_REPLY_DELAY].total_microseconds))
     cg.add(
         var.set_setpoint_map(
             config[CONF_SETPOINT_BASE],

@@ -1,6 +1,6 @@
 # Example ESPHome config for the Panasonic R1/R2 bus interface.
-# Start listen-only (transmit: false), confirm frames decode with [cs ok] in the logs,
-# calibrate setpoint/mode/fan values from your own captures, then enable transmit.
+# Panasonic W18BD3P ducted AC via its R1/R2 wired-controller bus.
+# Register values, timing and the 0x81 transmit slot were confirmed on the real unit.
 esphome:
   name: panasonic-ac
   friendly_name: Panasonic AC
@@ -44,11 +44,12 @@ climate:
     id: ac
     name: Ducted AC
     rx_pin: GPIO27           # receiver collector, external 10k pull-up to 3V3
-    tx_pin: GPIO25           # 6N137 LED via 220 ohm
-    transmit: false          # flip to true only after the test plan's step 5
-    bit_time: 2020us         # use the value the sniffer's `stats` reports
-    carrier_frequency: 19200Hz
-    # transmit_after: 0x9F   # optional: only start sending right after this poll byte
+    tx_pin: GPIO25           # Q2 base via 1k (2N2222, R_TX 220 ohm to bus +)
+    transmit: true           # confirmed working on the W18BD3P, 2026-11-21
+    bit_time: 2000us         # bytes are 22.0 ms apart = 11 bits of 2.0 ms
+    carrier_frequency: 19300Hz
+    transmit_after: 0x81     # answer poll 0x81 like a second wall controller
+    reply_delay: 44ms        # the real controller answers poll 0x80 after 44 ms
     setpoint_base: 16        # confirmed: °C = index + 16 (22 °C = index 6)
     setpoint_step: 1
     setpoint_max_index: 14   # 16-30 °C
