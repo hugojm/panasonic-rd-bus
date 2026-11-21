@@ -206,7 +206,10 @@ constexpr uint8_t kFrameHeader = 0xE3;  // frames from the wall controller (sent
 constexpr uint8_t kFrameHeaderE1 = 0xE1;  // same format, seen around state changes
 constexpr size_t kMaxMsg = 40;
 
-inline bool is_frame_header(uint8_t v) { return v == kFrameHeader || v == kFrameHeaderE1; }
+// Seen so far: E3 (wall controller), E1 (indoor unit), D0 (controller, timer).
+// Polls (80-9F) and the A6 reply stay below 0xC0, so any byte >= 0xC0 starts a frame;
+// the length byte and the checksum reject anything that isn't one.
+inline bool is_frame_header(uint8_t v) { return v >= 0xC0; }
 
 // Checksum byte that makes (sum of all bytes) & 0x7F == 0.
 inline uint8_t checksum7(const uint8_t *d, size_t n) {
@@ -562,14 +565,15 @@ class BusStats {
 
 // ---------------------------------------------------------------------------
 // Unit state. Register map confirmed on a W18BD3P + CZ-RD514C (2026-11-21):
-//   0x60 power     0 = off, 1 = on
+//   0x60 power     bit 0: 0 = off, 1 = on; bit 2 (value 4) set while a timer is active
 //   0x61 mode      1 = heat, 2 = cool, 3 = fan, 4 = dry, 8 = auto
 //   0x62 fan       1 = high, 2 = medium, 3 = low, 8 = auto
 //   0x63 vane      always 8 on a ducted unit ("not available")
 //   0x64 setpoint  index, degrees C = index + 16
 //   0x66 filter    1 = "clean the filter" (sent by the indoor unit in E1 frames);
 //                  the wall controller resets it with E3 02 66 00 35
-// E1 frames come from the indoor unit, E3 frames from the wall controller.
+//   0x50 timer     duration, sent in a D0 frame (D0 02 50 14 4A = 0x14); units TBD
+// E1 frames come from the indoor unit, E3 and D0 frames from the wall controller.
 // Command frames carry (reg, value). State dumps carry (reg, 0x20 + value) pairs.
 // ---------------------------------------------------------------------------
 

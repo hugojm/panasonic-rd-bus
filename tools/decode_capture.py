@@ -126,7 +126,7 @@ def messages(byts, timeout_us: float = 60000):
             cur = []
         last_t = t
         if not cur:
-            if v in (0xE1, 0xE3):
+            if v >= 0xC0:  # E3 controller, E1 indoor unit, D0 timer
                 cur = [(t, v, err)]
                 continue
             yield t, ("POLL" if 0x80 <= v <= 0x9F else "TOKEN"), [v], err

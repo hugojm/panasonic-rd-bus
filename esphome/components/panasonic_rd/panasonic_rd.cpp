@@ -140,9 +140,10 @@ void PanasonicRD::on_message_(const rdbus::Message &m) {
 
 void PanasonicRD::publish_from_registers_() {
   const auto &r = this->state_.reg;
-  if (r[rdbus::kRegPower] == 0) {
+  // Bit 0 = on; bit 2 (value 4) appears while a timer is set, so test only bit 0.
+  if (r[rdbus::kRegPower] >= 0 && (r[rdbus::kRegPower] & 1) == 0) {
     this->mode = climate::CLIMATE_MODE_OFF;
-  } else if (r[rdbus::kRegPower] == 1) {
+  } else if (r[rdbus::kRegPower] >= 0) {
     climate::ClimateMode mode = climate::CLIMATE_MODE_AUTO;
     for (auto &mv : this->modes_)
       if (mv.value == r[rdbus::kRegMode])
@@ -188,7 +189,7 @@ void PanasonicRD::control(const climate::ClimateCall &call) {
     if (mode == climate::CLIMATE_MODE_OFF) {
       this->send_register(rdbus::kRegPower, 0);
     } else {
-      if (r[rdbus::kRegPower] != 1)
+      if (r[rdbus::kRegPower] < 0 || (r[rdbus::kRegPower] & 1) == 0)
         this->send_register(rdbus::kRegPower, 1);
       for (auto &mv : this->modes_)
         if (mv.key == mode && mv.value != r[rdbus::kRegMode])
