@@ -98,6 +98,37 @@ controller's. Lower R_TX (680, 470, 330 Ω) until yours reach the same level
 (~7.6 V on a W18BD3P). Don't go deeper than the wall controller does. If the dips
 reach your own receiver's threshold, the firmware reports "echo OK".
 
+## Zero-cost receiver (parts from a transistor + resistor kit)
+
+You can capture traffic before buying anything. One NPN transistor acts as the
+threshold detector:
+
+```
+ Bus + ──[10k]──┬── base   2N2222 / BC547 / 2N3904
+                │
+              [680R]
+                │
+ Bus − ─────────┴── emitter ── ESP32 GND
+                    collector ──┬── GPIO34
+                                └─[10k]── 3V3
+```
+
+- The transistor switches on when its base reaches ~0.65 V. That happens at a bus
+  voltage of about 0.65 × (10k + 680) / 680 ≈ 10.2 V, half-way between idle
+  (15.2 V) and the carrier dips (7.6 V). At idle it is fully on. In the dips it is
+  off. So the collector toggles with the carrier. Polarity doesn't matter to the
+  firmware.
+- **This version is not isolated:** the ESP32's ground is bus −. Find which wire
+  is + with a multimeter first (there is no bridge). Check that neither wire shows
+  more than a few volts to earth. While connected, run the laptop on battery with
+  its charger unplugged.
+- The bus loading is ~1.4 mA, about the same as the opto version.
+- For another idle voltage, scale the 10k so the threshold sits half-way:
+  `R_top ≈ 680 × (V_threshold / 0.65 − 1)`.
+
+Once frames decode with `[cs ok]`, buy the isolated parts below. Ordering them
+together from one EU shop avoids the per-parcel import fees AliExpress adds.
+
 ## Parts
 
 | Part | Qty | Notes |
