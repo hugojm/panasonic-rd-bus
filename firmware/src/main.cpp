@@ -9,8 +9,10 @@
 using namespace rdbus;
 
 #ifndef RX_PIN
-#define RX_PIN 34  // H11L1 output (external 4.7k pull-up to 3V3; GPIO34 has no internal pull-up)
+#define RX_PIN 27  // receiver transistor/opto collector, external 10k pull-up to 3V3
 #endif
+// GPIO34-39 are input-only without pull-ups; elsewhere add the internal one as a backup.
+#define RX_INTERNAL_PULLUP (RX_PIN < 34)
 #ifndef TX_PIN
 #define TX_PIN 25  // drives the 6N137 LED via 220 ohm; HIGH = pull the bus
 #endif
@@ -195,7 +197,7 @@ static void command(String c) {
 void setup() {
   Serial.begin(115200);
   delay(300);
-  if (!rx.begin((gpio_num_t) RX_PIN, false))
+  if (!rx.begin((gpio_num_t) RX_PIN, RX_INTERNAL_PULLUP))
     Serial.println("RX init failed");
   tx_ready = tx.begin((gpio_num_t) TX_PIN, carrier_hz);
   Serial.printf("\nPanasonic R1/R2 bus sniffer. RX GPIO%d, TX GPIO%d%s\n", RX_PIN, TX_PIN,

@@ -43,7 +43,7 @@ climate:
   - platform: panasonic_rd
     id: ac
     name: Ducted AC
-    rx_pin: GPIO34           # H11L1 output, external 4.7k pull-up to 3V3
+    rx_pin: GPIO27           # receiver collector, external 10k pull-up to 3V3
     tx_pin: GPIO25           # 6N137 LED via 220 ohm
     transmit: false          # flip to true only after the test plan's step 5
     bit_time: 2020us         # use the value the sniffer's `stats` reports
