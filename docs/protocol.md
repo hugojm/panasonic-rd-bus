@@ -80,6 +80,20 @@ Also seen, meaning unknown:
 - `E3 0C 68 00 6B 30 30 30 30 48 02 0D 50 13 44`: ASCII-like, sent with state dumps.
 - `E3 0C 65 20 61 22 62 21 64 26 63 28 68 00 09`: an alternative dump ordering.
 
+Buttons mapped one at a time (2026-11-21): OFF/ON, OPERATION, FAN SPEED, TEMP ▲/▼ and
+FILTER RESET send frames. **TIMER (SELECT, ▲/▼, SET, CANCEL), CLOCK, CHECK and A/C No.
+send nothing**: the controller keeps its clock and timers to itself and, when a timer
+fires, sends an ordinary power command. In Home Assistant, use automations instead.
+`D0 02 50 14 4A` plus a power value of 5 (`E3 02 60 05 36`) appeared once, while power
+was toggled with an OFF timer (13:20) armed. Probably a "timer armed" status; not needed.
+
+Housekeeping, about every 60 s: controller dumps `E3 0C 68 …` and `E3 0C 60 …`, then the
+indoor unit sends `E1 02 53 00 4A` and `E1 03 70 00 00 2C`.
+
+Bus devices on this install: wall controller (answers poll 0x80), an **Airzone** zoning
+gateway (probably poll 0x90; its `A6` replies use a ~24 kHz carrier vs ~19 kHz), and the
+ESP32, which answers the otherwise silent poll 0x81.
+
 Timing: polls every 154.6 ms; `A6` replies 44 ms after polls `80` and `90`;
 2-byte command frames repeated 3× at 176.7 ms; 12-byte dumps repeated 3× at 397.6 ms.
 Carrier measured at 19.1-19.3 kHz.
