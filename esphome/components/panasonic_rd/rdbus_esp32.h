@@ -185,7 +185,7 @@ class Transmitter {
 
  private:
   static constexpr ledc_timer_t kTimer = LEDC_TIMER_3;
-  static constexpr ledc_channel_t kChannel = LEDC_CHANNEL_7;
+  static constexpr ledc_channel_t kChannel = LEDC_CHANNEL_5;  // exists on ESP32 and on the 6-channel C3
 
   static void carrier_(bool on) {
     ledc_set_duty(LEDC_LOW_SPEED_MODE, kChannel, on ? 128 : 0);  // 50 % duty
