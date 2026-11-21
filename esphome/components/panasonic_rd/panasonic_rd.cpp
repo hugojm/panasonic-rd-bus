@@ -126,8 +126,14 @@ void PanasonicRD::on_message_(const rdbus::Message &m) {
   else if (m.kind == rdbus::MsgKind::BAD_FRAME)
     this->bad_frames_++;
 
-  if (rdbus::apply_frame(m, &this->state_))
+  if (rdbus::apply_frame(m, &this->state_)) {
     this->publish_from_registers_();
+    const int16_t f = this->state_.reg[rdbus::kRegFilter];
+    if (this->filter_sensor_ != nullptr && f >= 0 && f != this->last_filter_) {
+      this->last_filter_ = f;
+      this->filter_sensor_->publish_state(f != 0);
+    }
+  }
 }
 
 void PanasonicRD::publish_from_registers_() {

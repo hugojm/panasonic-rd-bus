@@ -2,6 +2,7 @@
 
 #include <vector>
 
+#include "esphome/components/binary_sensor/binary_sensor.h"
 #include "esphome/components/climate/climate.h"
 #include "esphome/core/component.h"
 
@@ -31,6 +32,7 @@ class PanasonicRD : public climate::Climate, public Component {
   void add_mode_value(climate::ClimateMode m, uint8_t v) { this->modes_.push_back({m, v}); }
   void add_fan_value(climate::ClimateFanMode f, uint8_t v) { this->fans_.push_back({f, v}); }
   void set_log_polls(bool v) { this->log_polls_ = v; }
+  void set_filter_sensor(binary_sensor::BinarySensor *s) { this->filter_sensor_ = s; }
 
   void setup() override;
   void loop() override;
@@ -40,6 +42,8 @@ class PanasonicRD : public climate::Climate, public Component {
   // For YAML lambdas / API actions. Both return false if transmit is off or the queue is full.
   bool send_register(uint8_t reg, uint8_t value);
   bool send_raw(const std::vector<uint8_t> &bytes, uint8_t times = 1);
+  // Same frame the wall controller sends for "filter reset" (E3 02 66 00 35).
+  bool reset_filter() { return this->send_register(rdbus::kRegFilter, 0); }
 
  protected:
   climate::ClimateTraits traits() override;
@@ -65,6 +69,8 @@ class PanasonicRD : public climate::Climate, public Component {
   float sp_step_{1};
   uint8_t sp_max_{14};
   bool log_polls_{false};
+  binary_sensor::BinarySensor *filter_sensor_{nullptr};
+  int16_t last_filter_{-1};
   std::vector<Mapping<climate::ClimateMode>> modes_;
   std::vector<Mapping<climate::ClimateFanMode>> fans_;
 

@@ -58,8 +58,17 @@ climate:
       dry: 0x04
       fan_only: 0x03
       auto: 0x08
+    filter_dirty:
+      name: Filter needs cleaning
     fan_values:              # register 0x62, confirmed on a W18BD3P
       low: 0x03
       medium: 0x02
       high: 0x01
       auto: 0x08
+
+button:
+  - platform: template
+    name: Reset filter warning
+    icon: mdi:air-filter
+    on_press:
+      - lambda: 'id(ac).reset_filter();'   # needs transmit: true

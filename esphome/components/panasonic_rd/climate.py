@@ -1,10 +1,11 @@
 import esphome.codegen as cg
-from esphome.components import climate
+from esphome.components import binary_sensor, climate
 import esphome.config_validation as cv
 from esphome import pins
 from esphome.components.esp32 import include_builtin_idf_component
 
 DEPENDENCIES = ["esp32"]
+AUTO_LOAD = ["binary_sensor"]
 
 panasonic_rd_ns = cg.esphome_ns.namespace("panasonic_rd")
 PanasonicRD = panasonic_rd_ns.class_("PanasonicRD", climate.Climate, cg.Component)
@@ -22,6 +23,7 @@ CONF_SETPOINT_MAX_INDEX = "setpoint_max_index"
 CONF_MODE_VALUES = "mode_values"
 CONF_FAN_VALUES = "fan_values"
 CONF_LOG_POLLS = "log_polls"
+CONF_FILTER_DIRTY = "filter_dirty"
 
 # Register values confirmed on a W18BD3P + CZ-RD514C (captured 2026-11-21).
 MODE_KEYS = {
@@ -66,6 +68,10 @@ CONFIG_SCHEMA = cv.All(
                 {cv.Optional(k): cv.hex_uint8_t for k in FAN_KEYS}
             ),
             cv.Optional(CONF_LOG_POLLS, default=False): cv.boolean,
+            # Indoor unit's "clean the filter" flag (register 0x66).
+            cv.Optional(CONF_FILTER_DIRTY): binary_sensor.binary_sensor_schema(
+                device_class="problem", icon="mdi:air-filter"
+            ),
         }
     )
     .extend(cv.COMPONENT_SCHEMA),
@@ -106,3 +112,6 @@ async def to_code(config):
     for key, value in config[CONF_FAN_VALUES].items():
         cg.add(var.add_fan_value(FAN_KEYS[key], value))
     cg.add(var.set_log_polls(config[CONF_LOG_POLLS]))
+    if CONF_FILTER_DIRTY in config:
+        sens = await binary_sensor.new_binary_sensor(config[CONF_FILTER_DIRTY])
+        cg.add(var.set_filter_sensor(sens))

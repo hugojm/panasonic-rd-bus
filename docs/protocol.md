@@ -66,6 +66,7 @@ Captured with the sniffer while pressing each button and noting the display.
 | `0x62` | fan | 1 = high, 2 = medium, 3 = low, 8 = auto (the reverse of post 54's guess) |
 | `0x63` | vane | always 8 on this ducted unit ("not available") |
 | `0x64` | setpoint | index; °C = index + 16 (22 °C = 6, 25 °C = 9) |
+| `0x66` | filter | 1 = clean the filter. The indoor unit reports it (`E1 02 66 01 36`); the remote's reset sends `E3 02 66 00 35`, and the unit confirms with `E1 02 66 00 37` |
 
 Command example: `E3 02 64 07 30` sets 23 °C. State dumps such as
 `E3 0C 60 21 61 22 62 28 63 28 64 26 49 20 0C` carry (reg, 0x20 + value) pairs:
@@ -73,9 +74,9 @@ on, cool, fan auto, vane 8, 22 °C.
 
 Also seen, meaning unknown:
 
-- `E1` frames with the same checksum (`E1 03 70 00 00 2C`, `E1 02 53 00 4A`,
-  `E1 02 66 01 36`), sent 3 times ~198 ms apart around state changes. They are
-  probably from the indoor unit (the `E3` frames are probably from the controller).
+- **`E1` frames come from the indoor unit and `E3` frames from the wall controller**
+  (confirmed by the filter reset). Unknown `E1` frames: `E1 03 70 00 00 2C`,
+  `E1 02 53 00 4A`, `E1 05 53 00 70 00 00 57`.
 - `E3 0C 68 00 6B 30 30 30 30 48 02 0D 50 13 44`: ASCII-like, sent with state dumps.
 - `E3 0C 65 20 61 22 62 21 64 26 63 28 68 00 09`: an alternative dump ordering.
 

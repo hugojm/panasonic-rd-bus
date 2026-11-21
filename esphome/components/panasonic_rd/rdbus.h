@@ -548,6 +548,9 @@ class BusStats {
 //   0x62 fan       1 = high, 2 = medium, 3 = low, 8 = auto
 //   0x63 vane      always 8 on a ducted unit ("not available")
 //   0x64 setpoint  index, degrees C = index + 16
+//   0x66 filter    1 = "clean the filter" (sent by the indoor unit in E1 frames);
+//                  the wall controller resets it with E3 02 66 00 35
+// E1 frames come from the indoor unit, E3 frames from the wall controller.
 // Command frames carry (reg, value). State dumps carry (reg, 0x20 + value) pairs.
 // ---------------------------------------------------------------------------
 
@@ -556,6 +559,7 @@ constexpr uint8_t kRegMode = 0x61;
 constexpr uint8_t kRegFan = 0x62;
 constexpr uint8_t kRegVane = 0x63;
 constexpr uint8_t kRegSetpoint = 0x64;
+constexpr uint8_t kRegFilter = 0x66;
 
 struct UnitState {
   int16_t reg[256];
