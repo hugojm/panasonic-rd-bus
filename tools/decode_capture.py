@@ -126,7 +126,7 @@ def messages(byts, timeout_us: float = 60000):
             cur = []
         last_t = t
         if not cur:
-            if v == 0xE3:
+            if v in (0xE1, 0xE3):
                 cur = [(t, v, err)]
                 continue
             yield t, ("POLL" if 0x80 <= v <= 0x9F else "TOKEN"), [v], err

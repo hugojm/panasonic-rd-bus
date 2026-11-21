@@ -38,9 +38,11 @@ class Receiver {
 
   // Closes a burst once the line has gone quiet and returns the time up to which
   // the line state is fully known. Call before popping.
-  uint32_t service(uint32_t now) {
+  uint32_t service(uint32_t /*caller_now*/) {
     Burst b;
     portENTER_CRITICAL(&mux_);
+    // Read the clock inside the lock so no edge can be newer than `now`.
+    const uint32_t now = (uint32_t) esp_timer_get_time();
     if (env_.idle(now, &b))
       push_(this, b);
     const uint32_t known = env_.active() ? env_.active_start() : now;

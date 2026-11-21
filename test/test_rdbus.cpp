@@ -32,6 +32,9 @@ static const std::vector<Bytes> kPost54Frames = {
     {0xE3, 0x0C, 0x60, 0x21, 0x61, 0x22, 0x62, 0x28, 0x63, 0x28, 0x64, 0x21, 0x49, 0x20, 0x0A},  // dump
     {0xE3, 0x0A, 0x6B, 0x30, 0x30, 0x30, 0x30, 0x48, 0x02, 0x0F, 0x4B, 0x20, 0x24},             // ascii-ish
     {0xE3, 0x07, 0x6B, 0x30, 0x30, 0x30, 0x30, 0x4B, 0x20, 0x00},
+    {0xE1, 0x03, 0x70, 0x00, 0x00, 0x2C},  // E1 frames captured on a W18BD3P
+    {0xE1, 0x02, 0x53, 0x00, 0x4A},
+    {0xE1, 0x02, 0x66, 0x01, 0x36},
 };
 
 struct Sim {
@@ -133,6 +136,8 @@ static void test_checksums() {
   std::printf("checksums of post-54 frames\n");
   for (auto &f : kPost54Frames) {
     CHECK(checksum7_ok(f.data(), f.size()));
+    if (f[0] != kFrameHeader)
+      continue;
     uint8_t out[kMaxMsg];
     size_t n = build_frame(f.data() + 2, f.size() - 3, out, sizeof out);
     CHECK(n == f.size());
@@ -206,6 +211,19 @@ static void test_short_burst_before_frame() {
   CHECK(msgs.size() == 1);
   if (!msgs.empty())
     CHECK(msgs[0].kind == MsgKind::FRAME && msgs[0].checksum_ok);
+}
+
+static void test_idle_with_stale_clock() {
+  std::printf("idle() with a clock read just before the last edge does not split the burst\n");
+  EnvelopeDetector env;
+  Burst b;
+  for (uint32_t t = 1000; t < 3000; t += 26)
+    CHECK(!env.edge(t, &b));
+  // The loop read now=2950, then an edge arrived at ~2990 before idle() ran.
+  CHECK(!env.idle(2950, &b));
+  CHECK(env.active());
+  CHECK(env.idle(2990 + 600, &b));  // genuinely quiet afterwards: closes once
+  CHECK(b.start_us == 1000 && b.edges > 70);
 }
 
 static void test_corrupt_checksum() {
@@ -374,6 +392,7 @@ int main() {
   }
   test_glitch_rejected();
   test_short_burst_before_frame();
+  test_idle_with_stale_clock();
   test_corrupt_checksum();
   test_truncated_frame_times_out();
   test_state();

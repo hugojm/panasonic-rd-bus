@@ -58,8 +58,11 @@ class EnvelopeDetector {
   }
 
   // Closes the current burst once the line has been quiet for gap_us.
+  // `now` may be slightly older than the last edge (an edge interrupt can land
+  // between reading the clock and calling this), so compare signed: a negative
+  // difference means "an edge just arrived", not "quiet for 71 minutes".
   RDBUS_ISR_INLINE bool idle(uint32_t now, Burst *done) {
-    if (active_ && (uint32_t) (now - last_) > gap_us_)
+    if (active_ && (int32_t) (now - last_) > (int32_t) gap_us_)
       return finish_(done);
     return false;
   }
@@ -199,8 +202,11 @@ class ByteDecoder {
 // Bytes -> messages
 // ---------------------------------------------------------------------------
 
-constexpr uint8_t kFrameHeader = 0xE3;
+constexpr uint8_t kFrameHeader = 0xE3;  // frames from the wall controller (sent by build_frame)
+constexpr uint8_t kFrameHeaderE1 = 0xE1;  // same format, seen around state changes
 constexpr size_t kMaxMsg = 40;
+
+inline bool is_frame_header(uint8_t v) { return v == kFrameHeader || v == kFrameHeaderE1; }
 
 // Checksum byte that makes (sum of all bytes) & 0x7F == 0.
 inline uint8_t checksum7(const uint8_t *d, size_t n) {
@@ -253,7 +259,7 @@ class FrameAssembler {
     last_t_ = b.t_us;
     const bool err = !b.parity_ok || !b.stop_ok;
     if (!collecting_) {
-      if (b.value == kFrameHeader) {
+      if (is_frame_header(b.value)) {
         collecting_ = true;
         cur_ = Message{};
         cur_.kind = MsgKind::FRAME;
