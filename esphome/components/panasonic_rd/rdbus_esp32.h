@@ -22,18 +22,25 @@ class Receiver {
   void set_gap_us(uint32_t g) { env_.set_gap_us(g); }
 
   bool begin(gpio_num_t pin, bool internal_pullup) {
+    // Order matters on ESP-IDF 5: install the ISR service, configure the pin with
+    // interrupts off, attach the handler, and only then enable the edge interrupt.
+    // (Configuring the interrupt first works on IDF 4.4 but never fires on IDF 5.)
+    esp_err_t e = gpio_install_isr_service(ESP_INTR_FLAG_IRAM);
+    if (e != ESP_OK && e != ESP_ERR_INVALID_STATE)
+      return false;  // INVALID_STATE = someone already installed it, fine
     gpio_config_t c = {};
     c.pin_bit_mask = 1ULL << pin;
     c.mode = GPIO_MODE_INPUT;
     c.pull_up_en = internal_pullup ? GPIO_PULLUP_ENABLE : GPIO_PULLUP_DISABLE;
     c.pull_down_en = GPIO_PULLDOWN_DISABLE;
-    c.intr_type = GPIO_INTR_ANYEDGE;
+    c.intr_type = GPIO_INTR_DISABLE;
     if (gpio_config(&c) != ESP_OK)
       return false;
-    esp_err_t e = gpio_install_isr_service(ESP_INTR_FLAG_IRAM);
-    if (e != ESP_OK && e != ESP_ERR_INVALID_STATE)
-      return false;  // INVALID_STATE = someone already installed it, fine
-    return gpio_isr_handler_add(pin, isr_, this) == ESP_OK;
+    if (gpio_isr_handler_add(pin, isr_, this) != ESP_OK)
+      return false;
+    if (gpio_set_intr_type(pin, GPIO_INTR_ANYEDGE) != ESP_OK)
+      return false;
+    return gpio_intr_enable(pin) == ESP_OK;
   }
 
   // Closes a burst once the line has gone quiet and returns the time up to which

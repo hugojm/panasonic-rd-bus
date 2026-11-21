@@ -183,6 +183,19 @@ static void command(String c) {
       return;
     }
     queue_tx(b, n, 1);
+  } else if (cmd == "pin") {
+    // Poll the RX pin directly (no interrupts) for 500 ms: separates wiring from ISR problems.
+    int last = gpio_get_level((gpio_num_t) RX_PIN), changes = 0, highs = 0, n = 0;
+    const int64_t end = esp_timer_get_time() + 500000;
+    while (esp_timer_get_time() < end) {
+      const int v = gpio_get_level((gpio_num_t) RX_PIN);
+      changes += v != last;
+      highs += v;
+      last = v;
+      n++;
+    }
+    Serial.printf("RX GPIO%d polled 500 ms: %d changes, high %d%% of %d samples, ISR edges so far %u\n", RX_PIN,
+                  changes, n ? highs * 100 / n : 0, n, rx.edges());
   } else if (cmd == "txpin") {
     const int p = arg.toInt();
     if (p == RX_PIN || (p >= 6 && p <= 11) || p == 1 || p == 3 || p >= 34) {

@@ -93,11 +93,14 @@ void PanasonicRD::loop() {
     }
   }
 
-  if (now - this->last_stats_log_ > 60000000) {
+  if (now - this->last_stats_log_ > 15000000) {
     this->last_stats_log_ = now;
-    ESP_LOGD(TAG, "Bus: %" PRIu32 " bursts, carrier ~%.0f Hz, bit ~%.0f us, frames ok/bad %" PRIu32 "/%" PRIu32 ", ring overflows %" PRIu32,
-             this->stats_.bursts(), this->stats_.carrier_hz(), this->stats_.bit_us(), this->good_frames_,
-             this->bad_frames_, this->rx_.overflows());
+    ESP_LOGD(TAG,
+             "Bus: %" PRIu32 " bursts, %" PRIu32 " edges, RX level %d, carrier ~%.0f Hz, bit ~%.0f us, "
+             "frames ok/bad %" PRIu32 "/%" PRIu32 ", ring overflows %" PRIu32,
+             this->stats_.bursts(), this->rx_.edges(), gpio_get_level((gpio_num_t) this->rx_pin_),
+             this->stats_.carrier_hz(), this->stats_.bit_us(), this->good_frames_, this->bad_frames_,
+             this->rx_.overflows());
   }
 }
 
