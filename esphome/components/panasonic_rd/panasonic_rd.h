@@ -84,6 +84,13 @@ class PanasonicRD : public climate::Climate, public Component {
   rdbus::TxScheduler sched_;
   rdbus::UnitState state_;
   uint32_t last_stats_log_{0};
+  // Optimistic UI: show a requested change at once (like the wall controller's own
+  // screen) and hold it until our frames are confirmed on the bus or give up.
+  bool optimistic_{false};
+  uint32_t optimistic_until_{0};
+  bool optimistic_active_(uint32_t now) const {
+    return this->optimistic_ && (int32_t) (now - this->optimistic_until_) < 0;
+  }
   uint32_t good_frames_{0}, bad_frames_{0};
 };
 

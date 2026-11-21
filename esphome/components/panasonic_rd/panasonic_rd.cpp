@@ -69,6 +69,9 @@ void PanasonicRD::loop() {
   for (size_t j = 0; j < nm; j++)
     this->on_message_(msg[j]);
 
+  if (this->optimistic_ && !this->optimistic_active_(now))
+    this->publish_from_registers_();  // 10 s without confirmation: show the real state
+
   if (this->tx_ready_) {
     const auto *pending = this->sched_.current();
     const auto event = pending ? this->sched_.poll(now, rdbus::TxScheduler::echo_timeout_us(*pending, this->dec_.bit_us()))
@@ -114,12 +117,15 @@ void PanasonicRD::on_message_(const rdbus::Message &m) {
   switch (this->sched_.on_message(m)) {
     case rdbus::TxScheduler::Event::SENT_OK:
       ESP_LOGD(TAG, "Our frame was echoed correctly");
+      if (!this->sched_.pending())
+        this->optimistic_until_ = (uint32_t) esp_timer_get_time();  // done: bus state wins
       break;
     case rdbus::TxScheduler::Event::COLLISION:
       ESP_LOGW(TAG, "Echo mismatch (collision?); retrying");
       break;
     case rdbus::TxScheduler::Event::GAVE_UP:
       ESP_LOGE(TAG, "Echo mismatch; gave up on this frame");
+      this->optimistic_until_ = (uint32_t) esp_timer_get_time();
       break;
     default:
       break;
@@ -137,7 +143,9 @@ void PanasonicRD::on_message_(const rdbus::Message &m) {
   else if (m.kind == rdbus::MsgKind::BAD_FRAME)
     this->bad_frames_++;
 
-  if (rdbus::apply_frame(m, &this->state_)) {
+  // Our own echo may change nothing new; still refresh the UI once optimism has ended.
+  const bool ended_optimism = this->optimistic_ && !this->optimistic_active_((uint32_t) esp_timer_get_time());
+  if (rdbus::apply_frame(m, &this->state_) || ended_optimism) {
     this->publish_from_registers_();
     const int16_t f = this->state_.reg[rdbus::kRegFilter];
     if (this->filter_sensor_ != nullptr && f >= 0 && f != this->last_filter_) {
@@ -149,6 +157,9 @@ void PanasonicRD::on_message_(const rdbus::Message &m) {
 
 void PanasonicRD::publish_from_registers_() {
   const auto &r = this->state_.reg;
+  if (this->optimistic_active_((uint32_t) esp_timer_get_time()) && this->sched_.pending())
+    return;  // a command is still waiting for its slot; keep showing what was requested
+  this->optimistic_ = false;
   // Bit 0 = on; bit 2 (value 4) appears while a timer is set, so test only bit 0.
   if (r[rdbus::kRegPower] >= 0 && (r[rdbus::kRegPower] & 1) == 0) {
     this->mode = climate::CLIMATE_MODE_OFF;
@@ -216,7 +227,21 @@ void PanasonicRD::control(const climate::ClimateCall &call) {
       if (fv.key == *call.get_fan_mode())
         this->send_register(rdbus::kRegFan, fv.value);
   }
-  // State is published when the unit's traffic (or our own echo) confirms the change.
+  if (!this->sched_.pending())
+    return;
+  // Show the request at once, like the wall controller's own screen. The bus confirms it;
+  // after a failed send or 10 s without confirmation the real state is shown again.
+  if (call.get_mode().has_value())
+    this->mode = *call.get_mode();
+  if (call.get_target_temperature().has_value()) {
+    const int idx = (int) lroundf((*call.get_target_temperature() - this->sp_base_) / this->sp_step_);
+    this->target_temperature = this->sp_base_ + this->sp_step_ * clamp(idx, 0, (int) this->sp_max_);
+  }
+  if (call.get_fan_mode().has_value())
+    this->fan_mode = *call.get_fan_mode();
+  this->optimistic_ = true;
+  this->optimistic_until_ = (uint32_t) esp_timer_get_time() + 10000000;
+  this->publish_state();
 }
 
 bool PanasonicRD::send_register(uint8_t reg, uint8_t value) {
