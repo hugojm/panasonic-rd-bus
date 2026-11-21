@@ -91,7 +91,8 @@ static void help() {
       "  arm / disarm    enable or disable transmit\n"
       "  send <reg> <val>  send E3 02 reg val CS three times (hex), e.g. send 60 01\n"
       "  raw <hex...>    send bytes exactly as given, once, e.g. raw E3 02 60 01 3A\n"
-      "  trigger <hex|off>  only transmit right after this single-byte message\n");
+      "  trigger <hex|off>  only transmit right after this single-byte message\n"
+      "  delay <ms>      with a trigger: answer exactly this long after it (remote uses 44)\n");
 }
 
 static size_t parse_hex(const String &s, uint8_t *out, size_t max) {
@@ -180,6 +181,17 @@ static void command(String c) {
       return;
     }
     queue_tx(b, n, 1);
+  } else if (cmd == "hold") {
+    // Diagnostic: continuous carrier for N ms, to check the TX stage reaches the bus.
+    if (!armed || !tx_ready) {
+      Serial.println("arm first");
+      return;
+    }
+    Segment s{true, (uint32_t) arg.toInt() * 1000};
+    Serial.println(tx.send(&s, 1) ? "carrier on" : "transmitter busy");
+  } else if (cmd == "delay") {
+    sched.set_reply_delay_us((uint32_t) (arg.toFloat() * 1000));
+    Serial.printf("reply delay %.1f ms after the trigger byte starts\n", arg.toFloat());
   } else if (cmd == "trigger") {
     if (arg == "off") {
       sched.set_trigger(-1);

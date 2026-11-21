@@ -390,6 +390,10 @@ class TxScheduler {
   void set_max_failures(uint8_t v) { max_failures_ = v; }
   // Only start right after this single-byte message (e.g. a poll), or -1 for any quiet gap.
   void set_trigger(int byte) { trigger_ = byte; }
+  // With a trigger: start exactly this long after the trigger byte began, like a
+  // device answering its poll (the wall controller answers poll 0x80 after 44 ms).
+  // 0 = any time after the trigger.
+  void set_reply_delay_us(uint32_t v) { reply_delay_us_ = v; }
 
   bool enqueue(const uint8_t *b, size_t n, uint8_t sends) {
     if (count_ == kQueue || n == 0 || n > kMaxMsg)
@@ -409,8 +413,10 @@ class TxScheduler {
 
   // Feed every decoded message (including our own echo).
   Event on_message(const Message &m) {
-    if (trigger_ >= 0 && m.len == 1 && m.data[0] == (uint8_t) trigger_ && m.kind != MsgKind::BAD_FRAME)
+    if (trigger_ >= 0 && m.len == 1 && m.data[0] == (uint8_t) trigger_ && !m.rx_error) {
       triggered_ = true;
+      trigger_t_ = m.t_us;
+    }
     if (!awaiting_echo_ || !count_)
       return Event::NONE;
     const Job &j = q_[head_];
@@ -429,10 +435,23 @@ class TxScheduler {
       return false;
     if (have_last_ && (uint32_t) (now - last_done_) < spacing_us_)
       return false;
-    if ((uint32_t) (now - last_bus_activity) < min_idle_us_)
-      return false;
-    if (trigger_ >= 0 && !triggered_)
-      return false;
+    if (trigger_ >= 0 && reply_delay_us_ > 0) {
+      // Reply slot: [trigger + delay, trigger + delay + 3 ms]. Missed it? Wait for the next poll.
+      if (!triggered_)
+        return false;
+      const int32_t since = (int32_t) (now - trigger_t_);
+      if (since < (int32_t) reply_delay_us_)
+        return false;
+      if (since > (int32_t) (reply_delay_us_ + 3000)) {
+        triggered_ = false;
+        return false;
+      }
+    } else {
+      if ((uint32_t) (now - last_bus_activity) < min_idle_us_)
+        return false;
+      if (trigger_ >= 0 && !triggered_)
+        return false;
+    }
     triggered_ = false;
     awaiting_echo_ = true;
     tx_start_ = now;
@@ -480,7 +499,7 @@ class TxScheduler {
   Job q_[kQueue];
   size_t head_ = 0, count_ = 0;
   bool awaiting_echo_ = false, triggered_ = false, have_last_ = false;
-  uint32_t tx_start_ = 0, last_done_ = 0;
+  uint32_t tx_start_ = 0, last_done_ = 0, trigger_t_ = 0, reply_delay_us_ = 0;
   uint32_t min_idle_us_ = 8000, spacing_us_ = 88500;
   uint8_t max_failures_ = 6;
   int trigger_ = -1;

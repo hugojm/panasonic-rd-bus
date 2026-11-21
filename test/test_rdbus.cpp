@@ -323,6 +323,24 @@ static void test_scheduler() {
   CHECK(!t.should_start(100000, 60000, false));
   t.on_message(mk({0x9F}, 110000));
   CHECK(t.should_start(140000, 110000, false));
+
+  // Reply slot: answer poll 0x81 exactly 44 ms after it started.
+  TxScheduler r;
+  r.set_trigger(0x81);
+  r.set_reply_delay_us(44000);
+  r.enqueue(f.data(), f.size(), 1);
+  r.on_message(mk({0x81}, 1000000));
+  CHECK(!r.should_start(1030000, 1022000, false));  // 30 ms: too early
+  CHECK(r.should_start(1044200, 1022000, false));   // 44.2 ms: in the slot (bus idle only 22 ms)
+  TxScheduler late;
+  late.set_trigger(0x81);
+  late.set_reply_delay_us(44000);
+  late.enqueue(f.data(), f.size(), 1);
+  late.on_message(mk({0x81}, 1000000));
+  CHECK(!late.should_start(1050000, 1022000, false));  // 50 ms: slot missed
+  CHECK(!late.should_start(1060000, 1022000, false));  // and not retried until the next poll
+  late.on_message(mk({0x81}, 1154600));
+  CHECK(late.should_start(1198700, 1176600, false));
 }
 
 static void test_stats() {
