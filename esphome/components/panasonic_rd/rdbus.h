@@ -464,6 +464,32 @@ class TxScheduler {
   // How long to wait for our own echo: the frame's air time plus decode slack.
   static uint32_t echo_timeout_us(const Job &j, uint32_t bit_us) { return j.len * 11u * bit_us + 150000u; }
 
+  // Like should_start, but for callers whose loop runs too slowly to hit a 3 ms reply
+  // slot (ESPHome loops every ~16 ms): returns true as soon as the trigger poll is seen
+  // and sets *start_at to the exact moment the transmission must begin, so a hardware
+  // timer can start it. Outside reply mode *start_at is simply `now`.
+  bool should_start_at(uint32_t now, uint32_t last_bus_activity, bool transmitter_busy, uint32_t *start_at) {
+    if (trigger_ < 0 || reply_delay_us_ == 0) {
+      *start_at = now;
+      return should_start(now, last_bus_activity, transmitter_busy);
+    }
+    if (!count_ || awaiting_echo_ || transmitter_busy || !triggered_)
+      return false;
+    if (have_last_ && (uint32_t) (now - last_done_) < spacing_us_)
+      return false;
+    const uint32_t target = trigger_t_ + reply_delay_us_;
+    const int32_t lead = (int32_t) (target - now);
+    if (lead < -3000) {  // slot already over: wait for the next poll
+      triggered_ = false;
+      return false;
+    }
+    triggered_ = false;
+    awaiting_echo_ = true;
+    *start_at = lead > 0 ? target : now;
+    tx_start_ = *start_at;
+    return true;
+  }
+
   // Call while waiting: reports a collision if no echo arrived in time.
   Event poll(uint32_t now, uint32_t echo_timeout_us) {
     if (awaiting_echo_ && (uint32_t) (now - tx_start_) > echo_timeout_us) {

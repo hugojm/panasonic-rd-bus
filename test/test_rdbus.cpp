@@ -343,6 +343,30 @@ static void test_scheduler() {
   CHECK(!late.should_start(1060000, 1022000, false));  // and not retried until the next poll
   late.on_message(mk({0x81}, 1154600));
   CHECK(late.should_start(1198700, 1176600, false));
+
+  // Slow loop (ESPHome, ~16 ms): schedule the exact start as soon as the poll is seen.
+  TxScheduler slow;
+  slow.set_trigger(0x81);
+  slow.set_reply_delay_us(44000);
+  slow.enqueue(f.data(), f.size(), 1);
+  uint32_t at = 0;
+  CHECK(!slow.should_start_at(1010000, 1000000, false, &at));  // no poll yet
+  slow.on_message(mk({0x81}, 1000000));                       // decoded ~21 ms in
+  CHECK(slow.should_start_at(1025000, 1022000, false, &at));   // loop wakes at 25 ms
+  CHECK(at == 1044000);                                         // exact slot
+  CHECK(!slow.should_start_at(1030000, 1022000, false, &at));  // now waiting for echo
+  TxScheduler missed;
+  missed.set_trigger(0x81);
+  missed.set_reply_delay_us(44000);
+  missed.enqueue(f.data(), f.size(), 1);
+  missed.on_message(mk({0x81}, 1000000));
+  CHECK(missed.should_start_at(1045500, 1022000, false, &at) && at == 1045500);  // 1.5 ms late: go now
+  TxScheduler gone;
+  gone.set_trigger(0x81);
+  gone.set_reply_delay_us(44000);
+  gone.enqueue(f.data(), f.size(), 1);
+  gone.on_message(mk({0x81}, 1000000));
+  CHECK(!gone.should_start_at(1060000, 1022000, false, &at));  // 16 ms late: skip this cycle
 }
 
 static void test_stats() {

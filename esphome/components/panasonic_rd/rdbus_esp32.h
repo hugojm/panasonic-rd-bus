@@ -163,7 +163,8 @@ class Transmitter {
   bool busy() const { return busy_; }
 
   // Starts sending asynchronously. Returns false if busy or too long.
-  bool send(const Segment *s, size_t n) {
+  // start_at: 32-bit esp_timer time (us) to begin at; 0 = in 200 us.
+  bool send(const Segment *s, size_t n, uint32_t start_at = 0) {
     if (busy_ || n == 0 || n > kMaxSeg || timer_ == nullptr)
       return false;
     for (size_t i = 0; i < n; i++)
@@ -171,8 +172,14 @@ class Transmitter {
     n_ = n;
     idx_ = 0;
     busy_ = true;
-    next_at_ = esp_timer_get_time() + 200;
-    esp_timer_start_once(timer_, 200);
+    const int64_t now = esp_timer_get_time();
+    int64_t delay = 200;
+    if (start_at != 0) {
+      const int32_t lead = (int32_t) (start_at - (uint32_t) now);
+      delay = lead > 50 ? lead : 50;
+    }
+    next_at_ = now + delay;
+    esp_timer_start_once(timer_, delay);
     return true;
   }
 

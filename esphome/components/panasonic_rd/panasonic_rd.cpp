@@ -83,13 +83,19 @@ void PanasonicRD::loop() {
       default:
         break;
     }
-    if (this->sched_.should_start(now, this->rx_.last_edge(), this->tx_.busy())) {
+    // The reply slot is only ~3 ms wide and this loop runs every ~16 ms, so schedule
+    // the exact start with a hardware timer as soon as the trigger poll is decoded.
+    uint32_t start_at = 0;
+    if (this->sched_.should_start_at(now, this->rx_.last_edge(), this->tx_.busy(), &start_at)) {
       static rdbus::Segment seg[rdbus::Transmitter::kMaxSeg];
       const auto *job = this->sched_.current();
       const size_t n = rdbus::encode_bytes(job->bytes, job->len, this->dec_.bit_us(), rdbus::Parity::EVEN, 0, seg,
                                            rdbus::Transmitter::kMaxSeg);
-      if (n == 0 || !this->tx_.send(seg, n))
+      if (n == 0 || !this->tx_.send(seg, n, start_at)) {
         ESP_LOGW(TAG, "Transmitter refused the frame");
+      } else {
+        ESP_LOGV(TAG, "Transmitting in %d us", (int) (int32_t) (start_at - now));
+      }
     }
   }
 
