@@ -1,0 +1,129 @@
+# ESPHome config for the bus-powered AC board v2 (hardware/pcb_v2).
+# Same bus logic as panasonic-ac-c3.yaml. The difference is power: the board draws a
+# steady ~19 mA from the AC bus into two 1000 uF capacitors (VSTORE), so Wi-Fi is kept
+# off until they are charged, and the radio runs in power-save mode.
+#
+# VSTORE on bus power: buck starts at ~8.1 V, stops at ~7.3 V, full is ~13.7 V.
+# On USB alone VSTORE sits at ~4.6 V (USB through a diode), which bus power never shows
+# while the ESP32 is running - so "below 6.5 V" means USB and Wi-Fi can go on at once.
+esphome:
+  name: panasonic-ac-v2
+  friendly_name: Panasonic AC
+
+esp32:
+  board: esp32-c3-devkitm-1
+  variant: esp32c3
+  framework:
+    type: esp-idf
+
+external_components:
+  - source:
+      type: local
+      path: components
+    components: [panasonic_rd]
+
+logger:
+  level: INFO
+
+api:
+  encryption:
+    key: !secret api_key
+  actions:
+    - action: send_register
+      variables:
+        reg: int
+        value: int
+      then:
+        - lambda: 'id(ac).send_register(reg, value);'
+
+ota:
+  - platform: esphome
+    password: !secret ota_password
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  enable_on_boot: false      # turned on by the VSTORE check below
+  power_save_mode: light     # radio sleeps between beacons: ~20-30 mA average instead of ~80
+  output_power: 13dB
+  fast_connect: true         # skip the full scan, the most power-hungry part of connecting
+  ap:
+    ssid: Panasonic-AC Fallback
+    password: !secret ap_password
+
+captive_portal:
+
+sensor:
+  - platform: adc
+    id: vstore
+    pin: GPIO3               # VSTORE through 100k / 18k
+    attenuation: 12db
+    update_interval: 500ms
+    internal: true
+    filters:
+      - multiply: 6.556      # (100k + 18k) / 18k
+    on_value:
+      then:
+        - if:
+            condition:
+              and:
+                - not:
+                    wifi.enabled:
+                - lambda: 'return x > 11.5 || x < 6.5;'   # charged from the bus, or on USB
+            then:
+              - logger.log:
+                  format: "VSTORE %.1f V: Wi-Fi on"
+                  args: [x]
+              - wifi.enable:
+        - if:
+            condition:
+              and:
+                - wifi.enabled:
+                - lambda: 'return x > 6.5 && x < 8.0;'    # bus supply sagging: rest the radio
+            then:
+              - logger.log:
+                  format: "VSTORE %.1f V: Wi-Fi off to recharge"
+                  args: [x]
+              - wifi.disable:
+  - platform: copy
+    source_id: vstore
+    name: Bus supply voltage
+    entity_category: diagnostic
+    filters:
+      - throttle: 60s
+
+climate:
+  - platform: panasonic_rd
+    id: ac
+    name: Ducted AC
+    rx_pin: GPIO4
+    rx_pullup: true
+    tx_pin: GPIO5
+    transmit: true
+    bit_time: 2000us
+    carrier_frequency: 19300Hz
+    transmit_after: 0x81
+    reply_delay: 44ms
+    setpoint_base: 16
+    setpoint_step: 1
+    setpoint_max_index: 14
+    mode_values:
+      cool: 0x02
+      heat: 0x01
+      dry: 0x04
+      fan_only: 0x03
+      auto: 0x08
+    filter_dirty:
+      name: Filter needs cleaning
+    fan_values:
+      low: 0x03
+      medium: 0x02
+      high: 0x01
+      auto: 0x08
+
+button:
+  - platform: template
+    name: Reset filter warning
+    icon: mdi:air-filter
+    on_press:
+      - lambda: 'id(ac).reset_filter();'
