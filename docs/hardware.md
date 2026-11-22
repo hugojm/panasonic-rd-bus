@@ -1,29 +1,67 @@
-# Hardware: isolated R1/R2 interface for an ESP32
+# Hardware: R1/R2 interface for an ESP32
 
-Two optocoupled channels: a receiver that turns carrier bursts into edges, and a
-transmitter that shunts the bus through a resistor at the carrier frequency, the
-way the wall controller's transistor stage does. The ESP32 never shares a ground
-with the bus.
+> **Safety.** Switch the AC off at the breaker before touching the indoor unit or the
+> wall controller. On many indoor PCBs the R1/R2 terminals sit next to mains terminals.
+> Before connecting anything, measure each bus wire against earth (AC and DC): you want a
+> few volts at most. If you see mains-level voltages, stop.
 
-> **Safety.** Switch the AC off at the breaker before touching the indoor unit.
-> On many indoor PCBs the R1/R2 terminals sit next to mains terminals. Before
-> connecting anything, measure each bus wire against earth (AC and DC): you want
-> a few volts at most. If you see mains-level voltages, stop.
+## The proven circuit (breadboard and PCBs)
+
+This is what runs on the W18BD3P, and what PCB v1/v2 implement. Two NPN transistors and
+six resistors.
+
+```
+                 RECEIVE                                   TRANSMIT
+
+ Bus + ──[10k]──┬── Q1 base (2N2222)        GPIO25 (TX) ──[1k]──┬── Q2 base (2N2222)
+                │                                               │
+              [680]                                           [10k]
+                │                                               │
+ Bus − ─────────┴── Q1 emitter ── GND       GND ────────────────┴── Q2 emitter
+                    Q1 collector ──[1k]── GPIO26 (RX, internal pull-up on)
+                                                                    Q2 collector ──[220]── Bus +
+```
+
+Bus − is the ESP32's ground. On the PCBs there is also an SMAJ24A TVS diode across the bus.
+
+**Receive.** Q1 switches on when its base reaches ~0.65 V, i.e. at a bus voltage of about
+0.65 × (10k + 680) / 680 ≈ 10.2 V: half-way between idle (15.2 V) and the carrier dips
+(7.6 V). Idle = on, dips = off, so the collector toggles with the carrier and the firmware
+measures edge timing. The 1k protects the GPIO; the bus loading is ~1.4 mA.
+
+**Transmit.** The firmware drives GPIO25 with a 19.3 kHz, 50 % carrier during 0-bits. Q2
+then pulls the bus down through 220 Ω, which makes dips as deep as the wall controller's.
+1 kΩ was too weak on the W18BD3P. The 10k holds Q2 off while the ESP32 boots or resets,
+so the transmitter is silent by default.
+
+**Notes**
+
+- **Not isolated.** Find which wire is + with a multimeter first (there is no bridge
+  rectifier). While a laptop is connected over USB, run it on battery.
+- **Never let the bus reach a GPIO directly.** 15 V on a GPIO destroys the pin (it
+  happened to GPIO27 during development, along with the transistor in front of it). Keep the
+  1k series resistors.
+- Avoid input-only or strapping pins. On a classic ESP32 DevKit, GPIO26 (RX) and GPIO25
+  (TX) work; on the ESP32-C3 PCBs, GPIO4 and GPIO5.
+- For a different idle voltage, scale the 10k so the threshold sits half-way:
+  `R_top ≈ 680 × (V_threshold / 0.65 − 1)`.
 
 ## Numbers this design is based on
 
 | Quantity | Value | Source |
 | --- | --- | --- |
-| Idle bus voltage | ~15.2 V DC | your scope, thread post 18 (multimeter shows 11-12 V because it averages) |
+| Idle bus voltage | ~15.2 V DC | scope, thread post 18 (a multimeter shows 11-12 V because it averages) |
 | Line during carrier | pulled down to ~7.6 V | same |
-| Carrier | ~19-24 kHz (half period ~21-26 us) | post 18 (your "21 us half-cell") and post 45 (19.2 kHz) |
-| Bit time | ~2.02 ms, 8E1, carrier = 0 | post 54 (majid's captures) |
-| Polarity | none (the bus is polarity-free) | Intesis INMBSPAN001R000 manual |
+| Carrier | 19.1-19.3 kHz from the wall controller; ~24 kHz from an Airzone gateway | measured on the W18BD3P |
+| Bit time | 2.0 ms, 8E1, carrier = 0 | measured; agrees with thread post 54 |
 
 Other units in the thread differ (one reported up to 31 V with 100 Hz ripple), so
-**measure yours first** and adjust the zener (below).
+**measure yours first**.
 
-## Schematic
+## Alternative: isolated interface (designed, not built)
+
+If you'd rather keep the ESP32 galvanically separate from the bus, this version uses two
+optocouplers and an isolated DC-DC. It has not been built or tested.
 
 ```
                  BUS SIDE (floating)                 |        ESP32 SIDE
@@ -38,7 +76,7 @@ Other units in the thread differ (one reported up to 31 V with 100 Hz ripple), s
  RECEIVE                                             |
    +V ──[1k]──┤◄── 8.2 V zener ──► H11L1 pin1 (A)    |   H11L1 pin6 Vcc ── 3V3  (100 nF to GND)
                                    H11L1 pin2 (K) ── -V   H11L1 pin5 GND ── GND
-                                                     |   H11L1 pin4 OUT ──┬── GPIO34
+                                                     |   H11L1 pin4 OUT ──┬── GPIO26
                                                      |                    └─[4.7k]── 3V3
                                                      |
  TRANSMIT                                            |
@@ -58,92 +96,16 @@ Other units in the thread differ (one reported up to 31 V with 100 Hz ripple), s
 
 Zener orientation: cathode towards `+V` (it is reverse-biased in normal use).
 
-### How it works
+- **Receive.** The H11L1's LED conducts only while the bus is above about
+  `Vz + 1.2 V + 1 mA × 1k` (~10.4 V after the bridge), so its output toggles at the
+  carrier frequency during every 0-bit. It has a Schmitt-trigger output and switches in
+  ~1 µs; a PC817 is too slow for a 20 kHz carrier.
+- **Transmit.** GPIO25 HIGH lights the 6N137, the BC547 turns off, the 2N7000 switches on
+  and `R_TX` pulls the bus down. Unpowered or idle, the 2N7000 stays off.
+- **Zener:** `Vz ≈ (V_idle + V_low) / 2 − 1.4 V (bridge) − 1.2 V (LED) − 1 V`; 7.5-8.2 V
+  for 15.2 V / 7.6 V.
+- **R_TX:** start at 1 kΩ and lower it (680, 470, 330, 220 Ω) until your dips on a scope
+  match the wall controller's. Don't go deeper than the wall controller does.
 
-**Receive.** Current flows through the H11L1's LED only while the bus is above
-about `Vz + 1.2 V + 1 mA * 1k`, roughly 10.4 V after the bridge. Idle (13.8 V) turns
-the LED on and the carrier dips (~6.2 V) turn it off, so the H11L1 output toggles at
-the carrier frequency during every 0-bit. The firmware only looks at edge spacing,
-so the output polarity does not matter. The H11L1 has a Schmitt-trigger output and
-switches in about 1 us. A PC817 is too slow for a 20 kHz carrier, which is probably
-why some captures in the thread changed shape when people swapped resistors.
-
-**Transmit.** GPIO25 HIGH lights the 6N137, its output goes low, the BC547
-turns off, the gate pull-up switches the 2N7000 on, and `R_TX` pulls the bus
-down. The firmware drives GPIO25 with a 50 % carrier during 0-bits. If the ESP32
-is unpowered, resetting or idle (GPIO LOW), the 6N137 output is high, the BC547
-holds the gate low and the bus is left alone. If the B0505S is unpowered the gate
-has no supply at all. So the transmitter fails safe.
-
-### Choosing the zener
-
-You want the threshold half-way between idle and the carrier dips, after the
-bridge's ~1.4 V drop:
-
-```
-Vz ~= (V_idle + V_low) / 2 - 1.4 V (bridge) - 1.2 V (LED) - 1 V (1 mA in 1k)
-```
-
-| Bus idle / low | Zener |
-| --- | --- |
-| 15.2 V / 7.6 V (W18BD3P) | 7.5-8.2 V |
-| 12 V / 6 V | 5.6 V |
-| ~30 V with ripple | measure the dips first; use a comparator if the ripple is close to the swing |
-
-### Choosing R_TX
-
-Start with **R_TX = 1 kΩ** (about 14 mA at 14 V; a 2N7000 is fine up to 200 mA).
-Put the scope on R1/R2, send a frame, and compare your dips with the wall
-controller's. Lower R_TX (680, 470, 330 Ω) until yours reach the same level
-(~7.6 V on a W18BD3P). Don't go deeper than the wall controller does. If the dips
-reach your own receiver's threshold, the firmware reports "echo OK".
-
-## Zero-cost receiver (parts from a transistor + resistor kit)
-
-You can capture traffic before buying anything. One NPN transistor acts as the
-threshold detector:
-
-```
- Bus + ──[10k]──┬── base   2N2222 / BC547 / 2N3904
-                │
-              [680R]
-                │
- Bus − ─────────┴── emitter ── ESP32 GND
-                    collector ──┬── GPIO34
-                                └─[10k]── 3V3
-```
-
-- The transistor switches on when its base reaches ~0.65 V. That happens at a bus
-  voltage of about 0.65 × (10k + 680) / 680 ≈ 10.2 V, half-way between idle
-  (15.2 V) and the carrier dips (7.6 V). At idle it is fully on. In the dips it is
-  off. So the collector toggles with the carrier. Polarity doesn't matter to the
-  firmware.
-- **This version is not isolated:** the ESP32's ground is bus −. Find which wire
-  is + with a multimeter first (there is no bridge). Check that neither wire shows
-  more than a few volts to earth. While connected, run the laptop on battery with
-  its charger unplugged.
-- The bus loading is ~1.4 mA, about the same as the opto version.
-- For another idle voltage, scale the 10k so the threshold sits half-way:
-  `R_top ≈ 680 × (V_threshold / 0.65 − 1)`.
-
-Once frames decode with `[cs ok]`, buy the isolated parts below. Ordering them
-together from one EU shop avoids the per-parcel import fees AliExpress adds.
-
-## Parts
-
-| Part | Qty | Notes |
-| --- | --- | --- |
-| ESP32 DevKit (the one you have) | 1 | any ESP32/S3/C3 works; adjust pins |
-| MB6S or DB107 bridge rectifier | 1 | |
-| H11L1 optocoupler | 1 | Schmitt output, 1 MHz. Not a PC817 |
-| 6N137 optocoupler | 1 | 10 MBd |
-| B0505S-1W isolated DC-DC | 1 | powers the bus side of the transmitter |
-| 2N7000 (or BS170) | 1 | |
-| BC547 (or 2N3904) | 1 | |
-| 8.2 V zener, 0.5 W | 1 | see table |
-| Resistors | | 220R, 1k ×3 (incl. R_TX), 4.7k ×4 |
-| 100 nF ceramic | 2 | |
-| Screw terminals, perfboard | | |
-
-Receive-only first: you can build the bridge + zener + H11L1 part alone and leave
-the transmit half for later.
+Parts: MB6S bridge, H11L1, 6N137, B0505S-1W, 2N7000, BC547, 8.2 V zener, resistors
+(220R, 1k × 3, 4.7k × 4), 2 × 100 nF.

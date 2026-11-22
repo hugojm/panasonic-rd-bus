@@ -14,14 +14,13 @@ independently; **likely** = one capture set; **guess** = interpretation.
 
 | Item | Value | Confidence |
 | --- | --- | --- |
-| Medium | 2 wires, polarity-free, DC-powered (~15 V idle on a W18BD3P) | confirmed |
-| Modulation | on/off keying of a ~19-24 kHz carrier; carrier = 0, silence = 1 | likely (posts 18, 45) |
-| Bit rate | ~2.02 ms per bit (~495 baud) | likely (post 54) |
-| Characters | 8E1, LSB first | likely (post 54) |
+| Medium | 2 wires, DC-powered (~15 V idle on a W18BD3P); polarity-free for Panasonic's own controllers (Intesis INMBSPAN001R000 manual) | confirmed |
+| Modulation | on/off keying of a ~19-24 kHz carrier; carrier = 0, silence = 1 | confirmed (W18BD3P, and posts 18, 45) |
+| Bit rate | 2.0 ms per bit (~495 baud) | confirmed (W18BD3P, and post 54) |
+| Characters | 8E1, LSB first | confirmed (W18BD3P, and post 54) |
 
-Your scope's "Manchester, ~21 us half-cell" (post 18) is most likely the carrier
-itself, seen at a fine timebase. Taken that way, it agrees with majid's
-~19 kHz carrier.
+The "Manchester, ~21 us half-cell" reading in post 18 is the carrier itself, seen at a
+fine timebase. Taken that way, it agrees with majid's ~19 kHz carrier.
 
 ### Why the March 2026 "1200 baud 8N1 inverted" result is unreliable
 
@@ -37,14 +36,14 @@ The old sniffer read the bus through a 10k/3.3k divider into a hardware UART at
   (`00 08 80 88 90 98`), which looks like aliasing, not data.
 
 What the old captures do show correctly is timing: bursts every ~155 ms, the same
-poll interval as post 54. That's good evidence that your unit runs the same bus
-as majid's. The fan-speed table in the old `PROTOCOL.md` probably follows the real
+poll interval as post 54. That was the first evidence that the W18BD3P runs the
+same bus as majid's unit. The fan-speed table in the old `PROTOCOL.md` probably follows the real
 state through a consistent alias. Don't reuse its byte values.
 
 `test/test_rdbus.cpp` shows this: the same synthetic traffic decoded at 1200 baud
 recovers no valid frames.
 
-## Link layer (post 54, AI-assisted, one unit)
+## Link layer (post 54, then confirmed on the W18BD3P)
 
 - Polls: single bytes cycling `80 81 90 91 … 9F`, one every ~155 ms. `80` and
   `90` get a one-byte reply `A6`. Guess: `80/81` = main/sub controller, `90-9F` =
@@ -98,13 +97,20 @@ Timing: polls every 154.6 ms; `A6` replies 44 ms after polls `80` and `90`;
 2-byte command frames repeated 3× at 176.7 ms; 12-byte dumps repeated 3× at 397.6 ms.
 Carrier measured at 19.1-19.3 kHz.
 
+## Sending as a second controller (confirmed)
+
+The indoor unit accepts `E3` frames from a second device. What works on the W18BD3P:
+
+- Wait for poll `81` (the sub-controller address, silent on a single-controller install).
+- Start the frame **44 ms after that poll**, the same delay the wall controller uses after
+  poll `80`. Sending in any other quiet gap collides with other traffic.
+- Carrier 19.3 kHz, 2.0 ms bits, 8E1; send the frame once per change (`E3 02 62 02 37` =
+  fan medium was the first accepted command).
+- The unit confirms by changing state; the wall controller's display follows.
+
 ## Open questions
 
-1. Which device polls (the test plan's step 2 answers this).
+1. Which device generates the polls (indoor unit or wall controller).
 2. What the `E1` frames and registers `0x49`, `0x65`, `0x68`, `0x6B` mean.
-3. Inter-byte timing inside frames, and how the wall controller picks its
-   transmit slot.
-4. Whether the indoor unit accepts a second controller's frames, and from which
-   address. The PACi bus distinguishes the wall controller (0x40) from an
-   adaptor (0xE0). If this bus does something similar, frames may carry a
-   source we haven't recognised yet.
+3. Inter-byte timing inside frames.
+4. Whether other models (other ducted units, other controllers) use the same registers.

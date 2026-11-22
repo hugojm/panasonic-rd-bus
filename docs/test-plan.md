@@ -1,6 +1,8 @@
-# Test plan: from first capture to Home Assistant
+# Bringing up a new unit: from first capture to Home Assistant
 
-Each step has a check that tells you whether to move on.
+This is the path the W18BD3P went through. On another model, follow it to confirm the
+bus and map your registers before enabling transmit. Each step has a check that tells you
+whether to move on.
 
 ## 0. Measure (multimeter + scope)
 
@@ -10,11 +12,11 @@ Each step has a check that tells you whether to move on.
    scope is battery-powered). At 10 us/div, check the carrier frequency. At 20 ms/div,
    check the bit pattern (bursts with gaps of whole ~2 ms multiples).
 
-**Check:** idle and low levels noted, so you can choose the zener in `hardware.md`.
+**Check:** idle and low levels noted, so you can set the receive threshold in `hardware.md`.
 
 ## 1. Receive only
 
-Build the bridge + zener + H11L1 half. Flash the sniffer:
+Build the receive half of the circuit in `hardware.md` (Q1). Flash the sniffer:
 
 ```bash
 cd firmware
@@ -67,29 +69,30 @@ wait 5 s. Do each of these:
 | 0x63 | ? | |
 | 0x64 | setpoint index | index → °C: |
 
-**Check:** you can predict the frame for each button press. Post the table in the
-thread.
+**Check:** you can predict the frame for each button press. Please share the table
+(issue or the HA thread) so other models get documented.
 
-## 4. Find a safe transmit slot
+## 4. Transmit slot
 
-From the timestamps (`+xx.xms`), find where the bus is quiet for longer than one
-frame (a 5-byte frame takes ~111 ms). If the wall controller sends a command right
-after a particular poll, that poll is a good `trigger`.
+On the W18BD3P the answer was: reply to poll `81` (unused sub-controller address), 44 ms
+after it, like the wall controller does after poll `80`. Check that `81` is silent on your
+bus (no `A6` replies after it) before using it.
 
 ## 5. First transmission
 
-Build the transmit half with R_TX = 1 kΩ. Scope on the bus. In the sniffer:
+Build the transmit half (Q2, 220 Ω). Scope on the bus if you have one. In the sniffer:
 
 ```
-carrier 19200        # use the value from `stats`
-trigger 9F           # optional, from step 4
+carrier 19300        # use the value from `stats`
+trigger 81
+delay 44
 arm
-send 62 08           # a harmless fan change first
+send 62 02           # a harmless fan change first (fan medium on a W18BD3P)
 ```
 
 **Check, in order:**
 1. Sniffer prints `^ our frame, echo OK`. Your signal is on the bus and decodes.
-2. On the scope, your dips match the wall controller's depth (adjust R_TX).
+2. On the scope, your dips match the wall controller's depth.
 3. The wall controller's display or the unit reacts. This is the real proof.
 
 If 1 passes and 3 doesn't, compare your frame byte-for-byte and timing with the

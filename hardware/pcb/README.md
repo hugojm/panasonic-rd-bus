@@ -1,6 +1,6 @@
 # AC board v1 (ESP32-C3)
 
-A 60 × 46 mm two-layer board that replaces the breadboard/perfboard: an
+A 60 × 46 mm two-layer board that replaces the breadboard: an
 ESP32-C3-WROOM-02 module, USB-C (power + flashing), and the receive/transmit
 circuit proven on the W18BD3P bus. JLCPCB solders everything except the screw
 terminal, which they hand-solder too if you leave it in the BOM.
