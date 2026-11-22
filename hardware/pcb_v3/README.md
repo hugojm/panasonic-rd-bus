@@ -1,5 +1,9 @@
 # AC board v3: isolated from the AC bus (draft, not ordered)
 
+> ⚠️ **Untested design.** It passes KiCad's design checks and the isolation-gap check, but no
+> v3 board has been built or connected to an AC yet. The optocoupler timing is calculated,
+> not measured. Use it at your own risk, or wait for test results.
+
 Same ESP32-C3 board as [v1](../pcb/README.md), but the ESP32 never shares a wire with the AC
 bus. Signals cross a 2 mm gap in the copper through two optocouplers, and the bus-side
 transmit stage gets its power from a small isolated DC-DC. Wiring it wrong, a laptop on USB,

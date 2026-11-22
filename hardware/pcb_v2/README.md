@@ -1,5 +1,9 @@
 # AC board v2: powered from the AC bus (draft, not ordered)
 
+> ⚠️ **Untested design.** It passes KiCad's design checks, but no v2 board has been built or
+> connected to an AC yet. The bus's ability to power it is still unmeasured. Use it at your
+> own risk, or wait for test results.
+
 Same 60 × 46 mm board as [v1](../pcb/README.md), but no USB charger needed: it takes its
 power from the two bus wires it already listens on. USB-C stays for flashing and as a
 backup supply.
